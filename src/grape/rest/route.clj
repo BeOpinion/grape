@@ -7,8 +7,10 @@
             [plumbing.core :refer :all]
             [bidi.ring :refer (make-handler)]
             [clojure.tools.logging :as log]
-            [slingshot.slingshot :refer [try+]])
-  (:import (com.fasterxml.jackson.core JsonGenerationException)))
+            [slingshot.slingshot :refer [try+]]
+            [monger.collection :as mc])
+  (:import (com.fasterxml.jackson.core JsonGenerationException)
+           (org.bson.types ObjectId)))
 
 (defn rest-resource-handler [deps resource request]
   (if (= (:request-method request) :options)
@@ -34,7 +36,13 @@
                             (and item-method? (= :patch method) (:update (:operations resource #{})))
                             (and item-method? (= :delete method) (:delete (:operations resource #{})))
                             (and resource-method? (= :get method) (:read (:operations resource #{})))
-                            (and resource-method? (= :post method) (:create (:operations resource #{}))))]
+                            (and resource-method? (= :post method) (:create (:operations resource #{}))))
+          get-existing (fn []
+                         (when-some [auth-strategy (:auth-strategy resource)]
+                           (mc/find-one-as-map
+                             (get-in deps [:store :db])
+                             (get-in resource [:datasource :source])
+                             {:_id (ObjectId. (str (get-in request [:route-params :_id])))})))]
       (try+
         (cond
           (not allowed-method?)
@@ -62,13 +70,13 @@
           (and item-method? (= method :put))
           (let [find (:route-params request)
                 payload (merge (:body request {}) find)]
-            (->> (update-resource deps resource request find payload)
+            (->> (update-resource deps resource (assoc request :grape/existing (get-existing)) find payload)
                  (assoc {:status 200} :body)
                  format-eve-response))
           (and item-method? (= method :patch))
           (let [find (:route-params request)
                 payload (merge (:body request {}) find)]
-            (->> (partial-update-resource deps resource request find payload)
+            (->> (partial-update-resource deps resource (assoc request :grape/existing (get-existing)) find payload)
                  (assoc {:status 200} :body)
                  format-eve-response))
           (and item-method? (= method :delete))

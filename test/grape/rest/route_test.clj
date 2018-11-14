@@ -306,9 +306,18 @@
                            :content-type     :json
                            :coerce           :always
                            :throw-exceptions false
+                           :as               :json})
+              {status-patch-with-bad-token :status}
+              (http/patch "http://localhost:8080/comments/ccccccccccccccccccccccc1"
+                          {:query-params     {"access_token" (encode-jwt system {:user "aaaaaaaaaaaaaaaaaaaaaaa2"})}
+                           :body             (generate-string {:text "foo"})
+                           :content-type     :json
+                           :coerce           :always
+                           :throw-exceptions false
                            :as               :json})]
           (is (= 403 status-put))
-          (is (= 403 status-patch))))))
+          (is (= 403 status-patch))
+          (is (= 403 status-patch-with-bad-token))))))
 
   (testing "update success"
     (with-test-system
