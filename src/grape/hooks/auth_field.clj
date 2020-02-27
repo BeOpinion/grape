@@ -22,7 +22,8 @@
   (let [doc (merge existing payload)
         doc-field-value (doc-field doc)]
     (if use-belongs-field?
-      (let [belongs-value (-> (:belongs doc #{})
+      (let [belongs-value (-> (:belongs doc)
+                              set
                               (conj doc-field-value))]
         (when-not (some? (belongs-value auth-value))
           (throw (ex-info "Forbidden" {:type :forbidden}))))
@@ -72,7 +73,7 @@
                       (update-in query [:find]
                                  (fn [find]
                                    (if use-belongs-field?
-                                     (merge (dissoc find doc-field :belongs) {:$or [{:belongs auth-value} {doc-field auth-value}]})
+                                     (merge (dissoc find doc-field :belongs) {:$and [{:belongs auth-value} {doc-field (doc-field find)}]})
                                      (let [existing-value (doc-field find)
                                            existing-value (if (and (get existing-value "$in") (= 1 (count (get existing-value "$in"))))
                                                             (first (get existing-value "$in"))
