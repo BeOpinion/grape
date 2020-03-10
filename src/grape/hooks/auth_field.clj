@@ -9,20 +9,20 @@
             doc-field (:doc-field auth-strategy)
             request-auth (:auth request)
             auth-value ((:auth-field auth-strategy) request-auth)
-            use-belongs-field? (:use-belongs-field auth-strategy false)]
+            doc-field-multi-valued (:doc-field-multi-valued auth-strategy)]
         (if auth-field?
           (if (not request-auth)
             (throw (ex-info "Unauthorized" {:type :unauthorized}))
-            (on-request-auth auth-value doc-field use-belongs-field? arg existing))
+            (on-request-auth auth-value doc-field doc-field-multi-valued arg existing))
           arg))
       arg)))
 
 (defn- -check-auth-on-update!
-  [{:keys [doc-field auth-value use-belongs-field? payload existing]}]
+  [{:keys [doc-field auth-value doc-field-multi-valued payload existing]}]
   (let [doc (merge existing payload)
         doc-field-value (doc-field doc)]
-    (if use-belongs-field?
-      (let [belongs-value (-> (:belongs doc)
+    (if doc-field-multi-valued
+      (let [belongs-value (-> (doc-field-multi-valued doc)
                               set
                               (conj doc-field-value))]
         (when-not (some? (belongs-value auth-value))
@@ -48,32 +48,32 @@
                                        auth-value)))))
 
    :pre-update-post-validate
-   (wrap-auth :update (fn [auth-value doc-field use-belongs-field? payload existing]
+   (wrap-auth :update (fn [auth-value doc-field doc-field-multi-valued payload existing]
                         (update-in payload [doc-field]
                                    (fn [_]
                                      (-check-auth-on-update!
-                                       {:doc-field          doc-field
-                                        :auth-value         auth-value
-                                        :payload            payload
-                                        :existing           existing
-                                        :use-belongs-field? use-belongs-field?})))))
+                                       {:doc-field              doc-field
+                                        :auth-value             auth-value
+                                        :payload                payload
+                                        :existing               existing
+                                        :doc-field-multi-valued doc-field-multi-valued})))))
 
    :pre-partial-update-post-validate
-   (wrap-auth :update (fn [auth-value doc-field use-belongs-field? payload existing]
+   (wrap-auth :update (fn [auth-value doc-field doc-field-multi-valued payload existing]
                         (update-in payload [doc-field]
                                    (fn [_]
                                      (-check-auth-on-update!
-                                       {:doc-field          doc-field
-                                        :auth-value         auth-value
-                                        :payload            payload
-                                        :existing           existing
-                                        :use-belongs-field? use-belongs-field?})))))
+                                       {:doc-field              doc-field
+                                        :auth-value             auth-value
+                                        :payload                payload
+                                        :existing               existing
+                                        :doc-field-multi-valued doc-field-multi-valued})))))
    :pre-read
-   (wrap-auth :read (fn [auth-value doc-field use-belongs-field? query _]
+   (wrap-auth :read (fn [auth-value doc-field doc-field-multi-valued query _]
                       (update-in query [:find]
                                  (fn [find]
-                                   (if use-belongs-field?
-                                     (merge (dissoc find doc-field :belongs) {:$and [{:belongs auth-value} {doc-field (doc-field find)}]})
+                                   (if doc-field-multi-valued
+                                     (assoc (dissoc find doc-field-multi-valued) :$or [{doc-field-multi-valued auth-value} {doc-field auth-value}])
                                      (let [existing-value (doc-field find)
                                            existing-value (if (and (get existing-value "$in") (= 1 (count (get existing-value "$in"))))
                                                             (first (get existing-value "$in"))
